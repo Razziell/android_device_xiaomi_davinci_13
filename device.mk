@@ -95,7 +95,8 @@ PRODUCT_PACKAGES += \
     DavinciCNSettingsProviderOverlay \
     DavinciCNWifiOverlay \
     DavinciINSettingsProviderOverlay \
-    DavinciINWifiOverlay
+    DavinciINWifiOverlay \
+    WebviewOverlay
 
 # Power
 PRODUCT_COPY_FILES += \
