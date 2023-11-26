@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="config_spoofBuildGms" translatable="false">
+        <item>PropValue;DEVICE;clark</item>
+        <item>PropValue;FINGERPRINT;motorola/clark_retus/clark:6.0/MPHS24.49-18-8/4:user/release-keys</item>
+        <item>PropValue;MODEL;XT1575</item>
+        <item>PropValue;BRAND;motorola</item>
+        <item>PropValue;MANUFACTURER;motorola</item>
+        <item>PropValue;PRODUCT;clark_retus</item>
+        <item>PropValue;ID;MPHS24.49-18-8</item>
+        <item>VersionFieldString;SECURITY_PATCH;2016-09-01</item>
+    </string-array>
+</resources>
