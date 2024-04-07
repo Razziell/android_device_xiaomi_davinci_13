@@ -58,8 +58,7 @@ PRODUCT_COPY_FILES += \
 
 # Init scripts
 PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/rootdir/etc/init.davinci.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.davinci.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.nfc.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.nfc.rc
+    $(LOCAL_PATH)/rootdir/etc/init.davinci.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.davinci.rc
 
 # Lights
 PRODUCT_PACKAGES += \
@@ -68,6 +67,8 @@ PRODUCT_PACKAGES += \
 # NFC
 PRODUCT_PACKAGES += \
     com.android.nfc_extras \
+    NfcNci \
+    SecureElement \
     Tag
 
 PRODUCT_PACKAGES += \
@@ -92,10 +93,6 @@ DEVICE_PACKAGE_OVERLAYS += \
     $(LOCAL_PATH)/overlay-lineage
 
 PRODUCT_PACKAGES += \
-    DavinciCNSettingsProviderOverlay \
-    DavinciCNWifiOverlay \
-    DavinciINSettingsProviderOverlay \
-    DavinciINWifiOverlay \
     WebviewOverlay
 
 # Power
@@ -119,7 +116,9 @@ PRODUCT_SOONG_NAMESPACES += \
 
 # WiFi
 PRODUCT_PACKAGES += \
-    DavinciWifiOverlay
+    WifiOverlayCN \
+    WifiOverlayGLOBAL \
+    WifiOverlayINDIA
 
 # Call the proprietary setup
 $(call inherit-product, vendor/xiaomi/davinci/davinci-vendor.mk)
