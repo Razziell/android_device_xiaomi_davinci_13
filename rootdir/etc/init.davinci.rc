@@ -14,3 +14,6 @@ service vendor.nfc_hal_service /vendor/bin/hw/android.hardware.nfc@1.2-service
     group nfc
     task_profiles ServiceCapacityLow
     disabled
+
+on init
+    setprop ro.boot.product.display0 ${ro.product.display0}

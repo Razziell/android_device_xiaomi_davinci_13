@@ -32,8 +32,13 @@
 #include <android-base/properties.h>
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
+#include <android-base/file.h>
+#include <android-base/strings.h>
 
 using android::base::GetProperty;
+using android::base::ReadFileToString;
+using android::base::Split;
+using android::base::Trim;
 
 std::vector<std::string> ro_props_default_source_order = {
     "",
@@ -71,6 +76,28 @@ void set_ro_product_prop(const std::string &prop, const std::string &value) {
         property_override(prop_name.c_str(), value.c_str(), false);
     }
 };
+
+void import_kernel_cmdline(const std::function<void(const std::string&, const std::string&)>& fn) {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+
+    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
+        std::vector<std::string> pieces = android::base::Split(entry, "=");
+        if (pieces.size() == 2) {
+            fn(pieces[0], pieces[1]);
+        }
+    }
+}
+
+static void vendor_set_display0(const std::string& key, const std::string& value) {
+    if (key.empty()) return;
+
+    if (key == "msm_drm.dsi_display0" && value == "dsi_ss_fhd_eb_f10_cmd_display:") {
+        property_override("ro.product.display0", "eb");
+    } else if (key == "msm_drm.dsi_display0" && value == "dsi_ss_fhd_ea_f10_cmd_display:") {
+        property_override("ro.product.display0", "ea");
+    }
+}
 
 void vendor_load_properties() {
     std::string region;
@@ -112,4 +139,6 @@ void vendor_load_properties() {
     }
 
     property_override("ro.boot.hardware.revision", hardware_revision.c_str());
+
+    import_kernel_cmdline(vendor_set_display0);
 }
