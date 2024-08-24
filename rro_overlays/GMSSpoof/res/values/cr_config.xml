@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="config_spoofBuildGms" translatable="false">
-        <item>PropValue;DEVICE;sailfish</item>
-        <item>PropValue;FINGERPRINT;google/sailfish/sailfish:8.1.0/OPM1.171019.011/4448085:user/release-keys</item>
-        <item>PropValue;MODEL;Pixel</item>
+        <item>PropValue;DEVICE;akita</item>
+        <item>PropValue;FINGERPRINT;google/akita_beta/akita:15/AP31.240617.015/12207491:user/release-keys</item>
+        <item>PropValue;MODEL;Pixel 8a</item>
         <item>PropValue;BRAND;google</item>
         <item>PropValue;MANUFACTURER;Google</item>
-        <item>PropValue;PRODUCT;sailfish</item>
-        <item>PropValue;ID;OPM1.171019.011</item>
-        <item>VersionFieldString;SECURITY_PATCH;2017-12-05</item>
+        <item>PropValue;PRODUCT;akita_beta</item>
+        <item>PropValue;ID;AP31.240617.015</item>
+        <item>VersionFieldString;SECURITY_PATCH;2024-08-05</item>
     </string-array>
 </resources>
