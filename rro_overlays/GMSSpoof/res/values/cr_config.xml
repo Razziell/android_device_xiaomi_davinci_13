@@ -9,5 +9,7 @@
         <item>PropValue;PRODUCT;oriole_beta</item>
         <item>PropValue;ID;AP41.240823.009</item>
         <item>VersionFieldString;SECURITY_PATCH;2024-09-05</item>
+        <item>VersionFieldString;INCREMENTAL;12329489</item>
+        <item>VersionFieldInt;DEVICE_INITIAL_SDK_INT;31</item>
     </string-array>
 </resources>
