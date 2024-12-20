@@ -8,8 +8,8 @@
         <item>PropValue;MANUFACTURER;Google</item>
         <item>PropValue;PRODUCT;oriole_beta</item>
         <item>PropValue;ID;BP11.241025.006</item>
-        <item>PropValue;SECURITY_PATCH;2024-11-05</item>
-        <item>PropValue;INCREMENTAL;12620009</item>
-        <item>PropValue;DEVICE_INITIAL_SDK_INT;21</item>
+        <item>PropValue;VERSION.SECURITY_PATCH;2024-11-05</item>
+        <item>PropValue;VERSION.INCREMENTAL;12620009</item>
+        <item>PropValue;VERSION.SDK_INT;21</item>
     </string-array>
 </resources>
