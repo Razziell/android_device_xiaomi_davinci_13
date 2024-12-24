@@ -13,6 +13,9 @@ $(call inherit-product, device/xiaomi/sm6150-common/sm6150.mk)
 # Use your signing keys
 -include vendor/lineage-priv/keys/keys.mk
 
+# Add gms certification
+-include vendor/certification/config.mk
+
 # Audio
 PRODUCT_PACKAGES += \
     audio.primary.sm6150 \
@@ -66,9 +69,6 @@ EXTRA_UDFPS_ANIMATIONS := true
 # Fstab
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/fstab.qcom:$(TARGET_COPY_OUT_VENDOR)/etc/fstab.qcom
-
-PRODUCT_PACKAGES += \
-    GMSSpoof
 
 # Init scripts
 PRODUCT_COPY_FILES += \
