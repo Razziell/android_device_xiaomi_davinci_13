@@ -18,6 +18,7 @@
 #define LOG_TAG "audio_amplifier_tfa98xx"
 
 #include <log/log.h>
+#include <stdlib.h> // For calloc, free
 
 #include "audio_hw.h"
 #include "platform.h"
@@ -38,11 +39,13 @@
 typedef struct amp_device {
     amplifier_device_t amp_dev;
     struct audio_device* adev;
-    struct audio_usecase* usecase_tx;
+    /* This field is only valid during the enable/disable sequence */
+    struct audio_usecase* current_usecase_tx;
     struct pcm* tfa98xx_out;
 } tfa_t;
 
-static tfa_t* tfa_dev = NULL;
+// NOTE: Global static variable 'tfa_dev' was removed to prevent race conditions
+// and memory leaks. All state is now managed through the 'device' handle.
 
 static struct pcm_config pcm_config_tfa98xx = {
     .channels = 2,
@@ -55,109 +58,151 @@ static struct pcm_config pcm_config_tfa98xx = {
     .avail_min = 0,
 };
 
+static void cleanup_feedback_usecase(tfa_t* dev, struct audio_usecase* usecase) {
+    if (!dev || !usecase) {
+        return;
+    }
+
+    ALOGD("%s: Disabling tfa98xx feedback", __func__);
+    list_remove(&usecase->list);
+    disable_snd_device(dev->adev, usecase->in_snd_device);
+    disable_audio_route(dev->adev, usecase);
+    free(usecase);
+}
+
 static int amp_set_feedback(amplifier_device_t* device, void* adev, uint32_t snd_device, bool enable) {
-    if (!device) return 0;
-
-    tfa_dev->adev = (struct audio_device*)adev;
+    // The 'device' pointer is the handle to our state.
+    tfa_t* dev = (tfa_t*)device;
     int pcm_dev_tx_id = 0, rc = 0;
+    struct audio_usecase* usecase_tx = NULL;
 
-    if (!tfa_dev->adev) {
-        ALOGE("%d: Invalid params", __LINE__);
+    if (!dev || !adev) {
+        ALOGE("%s: Invalid params: device=%p, adev=%p", __func__, (void*)dev, adev);
         return -EINVAL;
     }
 
-    if (!is_spkr_out_snd_dev(snd_device)) return 0;
+    dev->adev = (struct audio_device*)adev;
 
-    if (!enable) goto disable;
+    if (!is_spkr_out_snd_dev(snd_device)) {
+        return 0;
+    }
 
-    if (tfa_dev->tfa98xx_out) return 0;
+    if (!enable) {
+        goto disable;
+    }
 
-    tfa_dev->usecase_tx = (struct audio_usecase*)calloc(1, sizeof(struct audio_usecase));
-    if (!tfa_dev->usecase_tx) {
-        ALOGE("%d: failed to allocate memory for usecase", __LINE__);
+    // Already enabled, do nothing.
+    if (dev->tfa98xx_out) {
+        return 0;
+    }
+
+    usecase_tx = (struct audio_usecase*)calloc(1, sizeof(struct audio_usecase));
+    if (!usecase_tx) {
+        ALOGE("%s: failed to allocate memory for usecase", __func__);
         return -ENOMEM;
     }
-    tfa_dev->usecase_tx->id = USECASE_AUDIO_SPKR_CALIB_TX;
-    tfa_dev->usecase_tx->type = PCM_CAPTURE;
-    tfa_dev->usecase_tx->in_snd_device = SND_DEVICE_IN_CAPTURE_VI_FEEDBACK;
-    list_init(&tfa_dev->usecase_tx->device_list);
 
-    list_add_tail(&tfa_dev->adev->usecase_list, &tfa_dev->usecase_tx->list);
-    enable_snd_device(tfa_dev->adev, tfa_dev->usecase_tx->in_snd_device);
-    enable_audio_route(tfa_dev->adev, tfa_dev->usecase_tx);
+    usecase_tx->id = USECASE_AUDIO_SPKR_CALIB_TX;
+    usecase_tx->type = PCM_CAPTURE;
+    usecase_tx->in_snd_device = SND_DEVICE_IN_CAPTURE_VI_FEEDBACK;
+    list_init(&usecase_tx->device_list);
 
-    pcm_dev_tx_id = platform_get_pcm_device_id(tfa_dev->usecase_tx->id, tfa_dev->usecase_tx->type);
-    ALOGD("pcm_dev_tx_id = %d", pcm_dev_tx_id);
+    // Add to the head of the list to fix Use-After-Free on call answer.
+    list_add_head(&dev->adev->usecase_list, &usecase_tx->list);
+    enable_snd_device(dev->adev, usecase_tx->in_snd_device);
+    enable_audio_route(dev->adev, usecase_tx);
+
+    // Store the usecase pointer temporarily to ensure it can be cleaned up on failure.
+    dev->current_usecase_tx = usecase_tx;
+
+    pcm_dev_tx_id = platform_get_pcm_device_id(usecase_tx->id, usecase_tx->type);
+    ALOGD("%s: pcm_dev_tx_id = %d", __func__, pcm_dev_tx_id);
     if (pcm_dev_tx_id < 0) {
-        ALOGE("%d: Invalid pcm device for usecase (%d)", __LINE__, tfa_dev->usecase_tx->id);
+        ALOGE("%s: Invalid pcm device for usecase (%d)", __func__, usecase_tx->id);
         rc = -ENODEV;
         goto disable;
     }
 
-    tfa_dev->tfa98xx_out =
-            pcm_open(tfa_dev->adev->snd_card, pcm_dev_tx_id, PCM_IN, &pcm_config_tfa98xx);
-    if (tfa_dev->tfa98xx_out && !pcm_is_ready(tfa_dev->tfa98xx_out)) {
-        ALOGE("%d: %s", __LINE__, pcm_get_error(tfa_dev->tfa98xx_out));
+    dev->tfa98xx_out =
+            pcm_open(dev->adev->snd_card, pcm_dev_tx_id, PCM_IN, &pcm_config_tfa98xx);
+    // The check for non-NULL is redundant as pcm_open always returns a valid pointer.
+    if (!pcm_is_ready(dev->tfa98xx_out)) {
+        ALOGE("%s: %s", __func__, pcm_get_error(dev->tfa98xx_out));
+        pcm_close(dev->tfa98xx_out);
+        dev->tfa98xx_out = NULL;
         rc = -EIO;
         goto disable;
     }
 
-    rc = pcm_start(tfa_dev->tfa98xx_out);
+    rc = pcm_start(dev->tfa98xx_out);
     if (rc < 0) {
-        ALOGE("%d: pcm start for TX failed", __LINE__);
+        ALOGE("%s: pcm start for TX failed", __func__);
         rc = -EINVAL;
         goto disable;
     }
 
     ALOGD("%s: Started tfa98xx feedback successfully", __func__);
-
+    dev->current_usecase_tx = NULL; // Clear temporary pointer on success.
     return 0;
 
 disable:
     ALOGV("%s: Disabling usecase", __func__);
-    if (tfa_dev->tfa98xx_out) {
-        pcm_close(tfa_dev->tfa98xx_out);
-        tfa_dev->tfa98xx_out = NULL;
+    if (dev->tfa98xx_out) {
+        pcm_close(dev->tfa98xx_out);
+        dev->tfa98xx_out = NULL;
     }
-    tfa_dev->usecase_tx = get_usecase_from_list(tfa_dev->adev, tfa_dev->usecase_tx->id);
-    if (tfa_dev->usecase_tx) {
-        ALOGD("%s: Disabling tfa98xx feedback", __func__);
-        list_remove(&tfa_dev->usecase_tx->list);
-        disable_snd_device(tfa_dev->adev, tfa_dev->usecase_tx->in_snd_device);
-        disable_audio_route(tfa_dev->adev, tfa_dev->usecase_tx);
-        free(tfa_dev->usecase_tx);
+
+    // If we are disabling after a failure during enable, use the temporary pointer.
+    // Otherwise, find the usecase in the list to disable it properly.
+    usecase_tx = dev->current_usecase_tx;
+    if (usecase_tx) {
+        dev->current_usecase_tx = NULL;
+    } else {
+        // This assumes only one instance of this usecase ID exists.
+        usecase_tx = get_usecase_from_list(dev->adev, USECASE_AUDIO_SPKR_CALIB_TX);
     }
+
+    if (usecase_tx) {
+        cleanup_feedback_usecase(dev, usecase_tx);
+    }
+
     return rc;
 }
 
 static int amp_dev_close(hw_device_t* device) {
     tfa_t* dev = (tfa_t*)device;
-    if (dev) free(dev);
-
+    if (dev) {
+        // Ensure resources are freed if the device is closed while active.
+        if (dev->tfa98xx_out) {
+            amp_set_feedback(&dev->amp_dev, dev->adev, SND_DEVICE_OUT_SPEAKER, false);
+        }
+        free(dev);
+    }
     return 0;
 }
 
 static int amp_module_open(const hw_module_t* module, const char* name, hw_device_t** device) {
+    tfa_t* dev;
+
     if (strcmp(name, AMPLIFIER_HARDWARE_INTERFACE)) {
-        ALOGE("%s:%d: %s does not match amplifier hardware interface name\n", __func__, __LINE__,
-              name);
+        ALOGE("%s: %s does not match amplifier hardware interface name", __func__, name);
         return -ENODEV;
     }
 
-    tfa_dev = calloc(1, sizeof(tfa_t));
-    if (!tfa_dev) {
-        ALOGE("%s:%d: Unable to allocate memory for amplifier device\n", __func__, __LINE__);
+    dev = calloc(1, sizeof(tfa_t));
+    if (!dev) {
+        ALOGE("%s: Unable to allocate memory for amplifier device", __func__);
         return -ENOMEM;
     }
 
-    tfa_dev->amp_dev.common.tag = HARDWARE_DEVICE_TAG;
-    tfa_dev->amp_dev.common.module = (hw_module_t*)module;
-    tfa_dev->amp_dev.common.version = HARDWARE_DEVICE_API_VERSION(1, 0);
-    tfa_dev->amp_dev.common.close = amp_dev_close;
+    dev->amp_dev.common.tag = HARDWARE_DEVICE_TAG;
+    dev->amp_dev.common.module = (hw_module_t*)module;
+    dev->amp_dev.common.version = HARDWARE_DEVICE_API_VERSION(1, 0);
+    dev->amp_dev.common.close = amp_dev_close;
 
-    tfa_dev->amp_dev.set_feedback = amp_set_feedback;
+    dev->amp_dev.set_feedback = amp_set_feedback;
 
-    *device = (hw_device_t*)tfa_dev;
+    *device = (hw_device_t*)dev;
 
     return 0;
 }
