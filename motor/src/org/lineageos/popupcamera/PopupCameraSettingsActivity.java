@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The LineageOS Project
+ * Copyright (C) 2020 - 2025 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,9 +28,12 @@ public class PopupCameraSettingsActivity extends CollapsingToolbarBaseActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getFragmentManager()
-                .beginTransaction()
-                .replace(R.id.content_frame, new PopupCameraSettingsFragment(), TAG_POPUPCAMERA)
-                .commit();
+        // Avoid re-adding the fragment after configuration changes.
+        if (savedInstanceState == null) {
+            getFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.content_frame, new PopupCameraSettingsFragment(), TAG_POPUPCAMERA)
+                    .commit();
+        }
     }
 }

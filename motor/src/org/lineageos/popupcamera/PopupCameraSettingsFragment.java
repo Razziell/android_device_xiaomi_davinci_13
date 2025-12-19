@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The LineageOS Project
+ * Copyright (C) 2020 - 2025 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,30 +18,31 @@ package org.lineageos.popupcamera;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.DialogFragment;
-import android.content.SharedPreferences;
+import android.content.Intent;
 import android.os.Bundle;
+
 import androidx.preference.Preference;
 import androidx.preference.Preference.OnPreferenceChangeListener;
 import androidx.preference.Preference.OnPreferenceClickListener;
 import androidx.preference.PreferenceFragment;
 
-import org.lineageos.popupcamera.R;
-
 public class PopupCameraSettingsFragment extends PreferenceFragment
         implements OnPreferenceChangeListener, OnPreferenceClickListener {
-    private Preference mCalibrationPreference;
-    private static final String MOTOR_CALIBRATION_KEY = "motor_calibration";
 
-    private PopupCameraService mPopupCameraService = new PopupCameraService();
+    private static final String MOTOR_CALIBRATION_KEY = "motor_calibration";
+    private static final String ACTION_CALIBRATE_MOTOR =
+            "org.lineageos.popupcamera.action.CALIBRATE_MOTOR";
+
+    private Preference mCalibrationPreference;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         addPreferencesFromResource(R.xml.popup_settings);
 
-        mCalibrationPreference = (Preference) findPreference(MOTOR_CALIBRATION_KEY);
-        mCalibrationPreference.setOnPreferenceClickListener(this);
+        mCalibrationPreference = findPreference(MOTOR_CALIBRATION_KEY);
+        if (mCalibrationPreference != null) {
+            mCalibrationPreference.setOnPreferenceClickListener(this);
+        }
     }
 
     @Override
@@ -51,7 +52,7 @@ public class PopupCameraSettingsFragment extends PreferenceFragment
 
     @Override
     public boolean onPreferenceClick(Preference preference) {
-        if (MOTOR_CALIBRATION_KEY.equals(preference.getKey())) {
+        if (preference != null && MOTOR_CALIBRATION_KEY.equals(preference.getKey())) {
             showCalibrationWarningDialog();
             return true;
         }
@@ -59,14 +60,19 @@ public class PopupCameraSettingsFragment extends PreferenceFragment
     }
 
     private void showCalibrationWarningDialog() {
-        AlertDialog alertDialog = new AlertDialog.Builder(getActivity())
+        final Activity a = getActivity();
+        if (a == null) return;
+
+        AlertDialog alertDialog = new AlertDialog.Builder(a)
                 .setTitle(R.string.popup_calibration_warning_title)
                 .setMessage(R.string.popup_calibration_warning_text)
-                .setPositiveButton(R.string.popup_camera_calibrate_now,
-                        (dialog, which) -> {
-                            mPopupCameraService.calibrateMotor();
-                            dialog.cancel();
-                        })
+                .setPositiveButton(R.string.popup_camera_calibrate_now, (dialog, which) -> {
+                    // Never instantiate Service with 'new'. Send an explicit command via Intent.
+                    Intent i = new Intent(a, PopupCameraService.class);
+                    i.setAction(ACTION_CALIBRATE_MOTOR);
+                    a.startService(i);
+                    dialog.cancel();
+                })
                 .setNegativeButton(android.R.string.cancel, (dialog, which) -> dialog.cancel())
                 .create();
         alertDialog.show();

@@ -1,3 +1,7 @@
--keep class org.lineageos.settings.popupcamera.* {
-  *;
-}
+-keep class org.lineageos.popupcamera.BootCompletedReceiver { *; }
+-keep class org.lineageos.popupcamera.PopupCameraService { *; }
+-keep class org.lineageos.popupcamera.PopupCameraSettingsActivity { *; }
+-keep class org.lineageos.popupcamera.PopupCameraSettingsFragment { *; }
+
+-keep class vendor.xiaomi.hardware.motor.V1_0.** { *; }
+-dontwarn vendor.xiaomi.hardware.motor.V1_0.**
