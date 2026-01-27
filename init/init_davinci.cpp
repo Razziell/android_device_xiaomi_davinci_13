@@ -27,20 +27,17 @@
    IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <vector>
+#include <cstring>
 
 #include <android-base/properties.h>
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 #include <android-base/file.h>
-#include <android-base/strings.h>
 
 using android::base::GetProperty;
 using android::base::ReadFileToString;
-using android::base::Split;
-using android::base::Trim;
 
-std::vector<std::string> ro_props_default_source_order = {
+static constexpr const char* const kPropSources[] = {
     "",
     "odm.",
     "system.",
@@ -48,66 +45,76 @@ std::vector<std::string> ro_props_default_source_order = {
     "vendor.",
     "vendor_dlkm.",
 };
+static constexpr size_t kPropSourcesCount = sizeof(kPropSources) / sizeof(kPropSources[0]);
 
-void property_override(char const prop[], char const value[], bool add = true)
+static void property_override(const char* prop, size_t prop_len,
+                              const char* value, size_t value_len,
+                              bool add = true)
 {
-    prop_info *pi;
-
-    pi = (prop_info *) __system_property_find(prop);
-    if (pi)
-        __system_property_update(pi, value, strlen(value));
-    else if (add)
-        __system_property_add(prop, strlen(prop), value, strlen(value));
+    auto pi = const_cast<prop_info*>(__system_property_find(prop));
+    if (pi) {
+        __system_property_update(pi, value, value_len);
+    } else if (add) {
+        __system_property_add(prop, prop_len, value, value_len);
+    }
 }
 
-void set_ro_build_prop(const std::string &prop, const std::string &value) {
-    for (const auto &source : ro_props_default_source_order) {
-        auto prop_name = "ro." + source + "build." + prop;
-        if (source == "")
-            property_override(prop_name.c_str(), value.c_str());
-        else
-            property_override(prop_name.c_str(), value.c_str(), false);
-    }
-};
+static inline void property_override(const char* prop, const char* value, bool add = true)
+{
+    property_override(prop, strlen(prop), value, strlen(value), add);
+}
 
-void set_ro_product_prop(const std::string &prop, const std::string &value) {
-    for (const auto &source : ro_props_default_source_order) {
-        auto prop_name = "ro.product." + source + prop;
-        property_override(prop_name.c_str(), value.c_str(), false);
-    }
-};
+static void set_ro_build_prop(const char* prop, const char* value)
+{
+    char prop_name[PROP_NAME_MAX];
+    const size_t value_len = strlen(value);
 
-void import_kernel_cmdline(const std::function<void(const std::string&, const std::string&)>& fn) {
-    std::string cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &cmdline);
-
-    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
-        std::vector<std::string> pieces = android::base::Split(entry, "=");
-        if (pieces.size() == 2) {
-            fn(pieces[0], pieces[1]);
+    for (size_t i = 0; i < kPropSourcesCount; ++i) {
+        int len = snprintf(prop_name, sizeof(prop_name), "ro.%sbuild.%s",
+                           kPropSources[i], prop);
+        if (len > 0 && static_cast<size_t>(len) < sizeof(prop_name)) {
+            property_override(prop_name, len, value, value_len, i == 0);
         }
     }
 }
 
-static void vendor_set_display0(const std::string& key, const std::string& value) {
-    if (key.empty()) return;
+static void set_ro_product_prop(const char* prop, const char* value)
+{
+    char prop_name[PROP_NAME_MAX];
+    const size_t value_len = strlen(value);
 
-    if (key == "msm_drm.dsi_display0" && value == "dsi_ss_fhd_eb_f10_cmd_display:") {
+    for (size_t i = 0; i < kPropSourcesCount; ++i) {
+        int len = snprintf(prop_name, sizeof(prop_name), "ro.product.%s%s",
+                           kPropSources[i], prop);
+        if (len > 0 && static_cast<size_t>(len) < sizeof(prop_name)) {
+            property_override(prop_name, len, value, value_len, false);
+        }
+    }
+}
+
+static void parse_cmdline_display(const char* cmdline)
+{
+    const char* key = "msm_drm.dsi_display0=";
+    const char* pos = strstr(cmdline, key);
+    if (!pos) return;
+
+    pos += strlen(key);
+
+    if (strncmp(pos, "dsi_ss_fhd_eb_f10_cmd_display:", 30) == 0) {
         property_override("ro.product.display0", "eb");
-    } else if (key == "msm_drm.dsi_display0" && value == "dsi_ss_fhd_ea_f10_cmd_display:") {
+    } else if (strncmp(pos, "dsi_ss_fhd_ea_f10_cmd_display:", 30) == 0) {
         property_override("ro.product.display0", "ea");
     }
 }
 
-void vendor_load_properties() {
-    std::string region;
-    std::string hardware_revision;
-    region = GetProperty("ro.boot.hwc", "GLOBAL");
-    hardware_revision = GetProperty("ro.boot.hwversion", "UNKNOWN");
+void vendor_load_properties()
+{
+    const std::string region = GetProperty("ro.boot.hwc", "GLOBAL");
+    const std::string hw_rev = GetProperty("ro.boot.hwversion", "UNKNOWN");
 
-    std::string model;
-    std::string device;
-    std::string mod_device;
+    const char* model;
+    const char* device;
+    const char* mod_device = nullptr;
 
     if (region == "GLOBAL") {
         model = "Mi 9T";
@@ -120,15 +127,23 @@ void vendor_load_properties() {
         model = "Redmi K20";
         device = "davinciin";
         mod_device = "davinciin_in_global";
+    } else {
+        model = "Mi 9T";
+        device = "davinci";
     }
 
     set_ro_product_prop("device", device);
     set_ro_product_prop("model", model);
-    if (mod_device != "") {
-        property_override("ro.product.mod_device", mod_device.c_str());
+
+    if (mod_device) {
+        property_override("ro.product.mod_device", mod_device);
     }
 
-    property_override("ro.boot.hardware.revision", hardware_revision.c_str());
+    property_override("ro.boot.product.hardware.sku", device);
+    property_override("ro.boot.hardware.revision", hw_rev.c_str());
 
-    import_kernel_cmdline(vendor_set_display0);
+    std::string cmdline;
+    if (ReadFileToString("/proc/cmdline", &cmdline)) {
+        parse_cmdline_display(cmdline.c_str());
+    }
 }

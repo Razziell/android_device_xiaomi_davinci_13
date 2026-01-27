@@ -25,6 +25,9 @@ BOARD_USES_ALSA_AUDIO := true
 
 # HIDL
 DEVICE_MANIFEST_FILE += $(DEVICE_PATH)/configs/hidl/manifest.xml
+ODM_MANIFEST_SKUS += davinci
+ODM_MANIFEST_DAVINCI_FILES := \
+    $(DEVICE_PATH)/configs/hidl/manifest-nfc.xml
 
 # HWUI
 HWUI_COMPILE_FOR_PERF := true
